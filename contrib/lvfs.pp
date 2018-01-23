@@ -83,25 +83,22 @@ package { 'cabextract':
 package { 'git':
     ensure => installed,
 }
-package { 'MySQL-python':
+package { 'python3-boto3':
     ensure => installed,
 }
-package { 'python2-boto3':
+package { 'python3-gnupg':
     ensure => installed,
 }
-package { 'python2-gnupg':
+package { 'python3-mysql':
     ensure => installed,
 }
-#package { 'python2-mysql':
-#    ensure => installed,
-#}
-package { 'python-flask':
+package { 'python3-flask':
     ensure => installed,
 }
-package { 'python2-flask-login':
+package { 'python3-flask-login':
     ensure => installed,
 }
-package { 'python-flask-wtf':
+package { 'python3-wtforms':
     ensure => installed,
 }
 

@@ -147,7 +147,7 @@ class Database(object):
                                    use_unicode=True, charset='utf8')
             self._db.autocommit(True)
         except mdb.Error as e:
-            print "Error %d: %s" % (e.args[0], e.args[1])
+            print("Error %d: %s" % (e.args[0], e.args[1]))
         assert self._db
         self.users = DatabaseUsers(self._db)
         self.groups = DatabaseGroups(self._db)

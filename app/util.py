@@ -41,7 +41,7 @@ def _event_log(msg, is_important=False):
         request_path = request.path
     from app import db
     if not hasattr(db, 'eventlog'):
-        print 'no eventlog, so ignoring %s from %s' % (msg, request_path)
+        print('no eventlog, so ignoring %s from %s' % (msg, request_path))
         return
     db.eventlog.add(msg, username, group_id,
                     _get_client_address(), is_important, request_path)

@@ -8,7 +8,7 @@ import os
 import datetime
 import hashlib
 import math
-import ConfigParser
+import configparser
 
 from gi.repository import AppStreamGlib
 from gi.repository import GCab
@@ -17,7 +17,7 @@ from gi.repository import GLib
 
 from flask import session, request, flash, url_for, redirect, render_template, Response
 from flask import send_from_directory, abort, make_response
-from flask.ext.login import login_required, login_user, logout_user
+from flask_login import login_required, login_user, logout_user
 
 from app import app, db, lm, ploader
 
@@ -62,7 +62,7 @@ def serveStaticResource(resource):
                                  os.path.basename(resource),
                                  user_agent)
         except CursorError as e:
-            print str(e)
+            print(str(e))
 
     # firmware blobs
     if resource.startswith('downloads/'):
@@ -77,7 +77,7 @@ def utility_processor():
     def format_truncate(tmp, length):
         if len(tmp) <= length:
             return tmp
-        return tmp[:length] + u'…'
+        return tmp[:length] + '…'
 
     def format_timestamp(tmp):
         if not tmp:
@@ -85,7 +85,7 @@ def utility_processor():
         return datetime.datetime.fromtimestamp(tmp).strftime('%Y-%m-%d %H:%M:%S')
 
     def format_size(num, suffix='B'):
-        if type(num) not in (int, long):
+        if type(num) not in (int, int):
             return "???%s???" % num
         for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
             if abs(num) < 1024.0:
@@ -112,7 +112,7 @@ def unauthorized():
 
 @app.errorhandler(401)
 def errorhandler_401(msg=None):
-    print "generic error handler"
+    print("generic error handler")
     return _error_permission_denied(msg)
 
 @app.route('/developers')
@@ -285,7 +285,7 @@ def upload():
         cfg.read_data(contents)
         try:
             tmp = cfg.get('Version', 'Class')
-        except (ConfigParser.NoOptionError, ConfigParser.NoSectionError) as e:
+        except (configparser.NoOptionError, configparser.NoSectionError) as e:
             flash('The inf file Version:Class was missing', 'danger')
             return redirect(request.url)
         if tmp != 'Firmware':
@@ -293,7 +293,7 @@ def upload():
             return redirect(request.url)
         try:
             tmp = cfg.get('Version', 'ClassGuid')
-        except ConfigParser.NoOptionError as e:
+        except configparser.NoOptionError as e:
             flash('The inf file Version:ClassGuid was missing', 'danger')
             return redirect(request.url)
         if tmp != '{f2e7dd72-6468-4e36-b6f1-6488f42c1b52}':
@@ -305,7 +305,7 @@ def upload():
             if len(fw_version_display_inf) != 2:
                 flash('The inf file Version:DriverVer was invalid', 'danger')
                 return redirect(request.url)
-        except ConfigParser.NoOptionError as e:
+        except configparser.NoOptionError as e:
             pass
 
         # this is optional, but if supplied must match the version in the XML
@@ -316,7 +316,7 @@ def upload():
                 fw_version_inf = str(int(fw_version_inf[2:], 16))
             if fw_version_inf == '0':
                 fw_version_inf = None
-        except (ConfigParser.NoOptionError, ConfigParser.NoSectionError) as e:
+        except (configparser.NoOptionError, configparser.NoSectionError) as e:
             pass
 
     # check metainfo exists
@@ -344,7 +344,7 @@ def upload():
         component.add_metadata('metainfo_id', hashlib.sha1(contents).hexdigest())
 
         # check the file does not have any missing request.form
-        if contents.find('FIXME') != -1:
+        if contents.decode('utf-8', 'ignore').find('FIXME') != -1:
             flash('The metadata file was not complete; '
                   'Any FIXME text must be replaced with the correct values.',
                   'danger')

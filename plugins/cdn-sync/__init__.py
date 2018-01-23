@@ -37,7 +37,7 @@ class Plugin(PluginBase):
             return
         basename = os.path.basename(fn)
         if basename not in fns.split(','):
-            print '%s not in %s' % (basename, fns)
+            print('%s not in %s' % (basename, fns))
             return
 
         # bucket not set
@@ -52,7 +52,7 @@ class Plugin(PluginBase):
             s3 = boto3.resource('s3')
             bucket = s3.Bucket(settings['bucket'])
             bucket.Acl().put(ACL='public-read')
-            print "uploading %s as %s" % (fn, key)
+            print("uploading %s as %s" % (fn, key))
             blob = open(fn, 'rb').read()
             obj = bucket.put_object(Key=key, Body=blob)
             obj.Acl().put(ACL='public-read')

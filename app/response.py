@@ -4,14 +4,14 @@
 # Copyright (C) 2017 Richard Hughes <richard@hughsie.com>
 # Licensed under the GNU General Public License Version 2
 
-from flask import Flask, Response, flash, render_template, g
+from flask import Response
 from werkzeug.datastructures import Headers
 
 class SecureResponse(Response):
     def __init__(self, response, **kwargs):
 
         # ensure headers always exist
-        if kwargs['headers'] == None:
+        if kwargs['headers'] is None:
             kwargs['headers'] = Headers()
         headers = kwargs['headers']
 
@@ -53,4 +53,4 @@ class SecureResponse(Response):
         args["frame-ancestors 'none'"] = None
         headers.add('Content-Security-Policy', None, **args)
 
-        return super(SecureResponse, self).__init__(response, **kwargs)
+        super(SecureResponse, self).__init__(response, **kwargs)

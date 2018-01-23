@@ -105,7 +105,7 @@ class Plugin(PluginBase):
         # does the detached signature already exist?
         detached_fn = firmware_cff.get_name() + '.asc'
         if _archive_get_files_from_glob(arc, detached_fn):
-            print "file %s is already GPG signed" % firmware_cff.get_name()
+            print("file %s is already GPG signed" % firmware_cff.get_name())
             return
 
         # create the detached signature
@@ -114,11 +114,12 @@ class Plugin(PluginBase):
             return
         contents = firmware_cff.get_bytes().get_data()
         contents_asc = affidavit.create(contents)
-        asc_cff = GCab.File.new_with_bytes(detached_fn, GLib.Bytes.new(contents_asc))
+        contents_bytes = GLib.Bytes.new(contents_asc.encode('utf-8'))
+        asc_cff = GCab.File.new_with_bytes(detached_fn, contents_bytes)
 
         # add it to the archive
         folders = arc.get_folders()
         if not folders:
-            print 'archive has no folders'
+            print('archive has no folders')
             return
         folders[0].add_file(asc_cff, False)
