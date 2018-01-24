@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 
 from gi.repository import GCab
-from gi.repository import Gio
+from gi.repository import GLib
 
 def _listdir_recurse(basedir):
     """ Return all files and folders """
@@ -55,11 +55,12 @@ def _repackage_archive(filename, buf, tmpdir=None):
 
     # add all the fake CFFILE objects
     arc = GCab.Cabinet.new()
-    cffolder = GCab.Folder.new()
+    cffolder = GCab.Folder.new(GCab.Compression.MSZIP)
     arc.add_folder(cffolder)
     for fn in _listdir_recurse(dest_fn):
+        contents = open(fn).read()
         fn_fixed = os.path.basename(fn.replace('\\', '/'))
-        cffile = GCab.File.new_with_file(fn_fixed, Gio.file_new_for_path(fn))
+        cffile = GCab.File.new_with_bytes(fn_fixed, GLib.Bytes.new(contents))
         cffolder.add_file(cffile, False)
     shutil.rmtree(dest_fn)
     src.close()
