@@ -4,6 +4,8 @@
 # Copyright (C) 2015-2017 Richard Hughes <richard@hughsie.com>
 # Licensed under the GNU General Public License Version 2
 
+from __future__ import print_function
+
 import os
 import datetime
 import hashlib
@@ -62,7 +64,7 @@ def serveStaticResource(resource):
                                  os.path.basename(resource),
                                  user_agent)
         except CursorError as e:
-            print str(e)
+            print(str(e))
 
     # firmware blobs
     if resource.startswith('downloads/'):
@@ -112,7 +114,7 @@ def unauthorized():
 
 @app.errorhandler(401)
 def errorhandler_401(msg=None):
-    print "generic error handler"
+    print("generic error handler")
     return _error_permission_denied(msg)
 
 @app.route('/developers')

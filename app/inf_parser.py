@@ -57,12 +57,12 @@ def main():
     for fn in sys.argv[1:]:
         cfg.read(fn)
         for section in cfg.sections():
-            print cfg.items(section)
-        print cfg.get("Version", "CatalogFile")
-        print cfg.get("Version", "Provider")
-        print cfg.get("Firmware_AddReg", "HKR->FirmwareId")
-        print cfg.get("Firmware_AddReg", "HKR->FirmwareVersion")
-        print cfg.get("Firmware_AddReg", "HKR->FirmwareFilename")
+            print(cfg.items(section))
+        print(cfg.get("Version", "CatalogFile"))
+        print(cfg.get("Version", "Provider"))
+        print(cfg.get("Firmware_AddReg", "HKR->FirmwareId"))
+        print(cfg.get("Firmware_AddReg", "HKR->FirmwareVersion"))
+        print(cfg.get("Firmware_AddReg", "HKR->FirmwareFilename"))
 
 if __name__ == "__main__":
     main()

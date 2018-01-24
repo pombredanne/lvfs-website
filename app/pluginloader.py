@@ -4,6 +4,8 @@
 # Copyright (C) 2018 Richard Hughes <richard@hughsie.com>
 # Licensed under the GNU General Public License Version 2
 
+from __future__ import print_function
+
 import os
 import sys
 
@@ -71,7 +73,7 @@ class Pluginloader(object):
                 if not plugin2:
                     continue
                 if plugin2.priority <= plugin.priority:
-                    print "raising priority of", plugin_name
+                    print("raising priority of", plugin_name)
                     plugin.priority = plugin2.priority + 1
 
         # sort by priority
