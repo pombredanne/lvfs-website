@@ -17,7 +17,7 @@ from gi.repository import GLib
 
 from flask import session, request, flash, url_for, redirect, render_template, Response
 from flask import send_from_directory, abort, make_response
-from flask.ext.login import login_required, login_user, logout_user
+from flask_login import login_required, login_user, logout_user
 
 from app import app, db, lm, ploader
 

@@ -8,7 +8,7 @@ import os
 import json
 
 from flask import session, request, url_for, redirect, render_template, flash, Response
-from flask.ext.login import login_required
+from flask_login import login_required
 
 from gi.repository import AppStreamGlib
 from gi.repository import GLib

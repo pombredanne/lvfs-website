@@ -7,7 +7,7 @@
 import os
 
 from flask import Flask, flash, render_template, g
-from flask.ext.login import LoginManager
+from flask_login import LoginManager
 from werkzeug.local import LocalProxy
 
 from .db import Database

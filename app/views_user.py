@@ -5,7 +5,7 @@
 # Licensed under the GNU General Public License Version 2
 
 from flask import session, request, flash, url_for, redirect, render_template
-from flask.ext.login import login_required
+from flask_login import login_required
 
 from app import app, db
 
