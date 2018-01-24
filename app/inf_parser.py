@@ -5,20 +5,20 @@
 # Licensed under the GNU General Public License Version 2
 
 import sys
-import ConfigParser
-import StringIO
+import configparser
+import io
 
-class InfParser(ConfigParser.RawConfigParser):
+class InfParser(configparser.RawConfigParser):
 
     def __init__(self):
-        ConfigParser.RawConfigParser.__init__(self, allow_no_value=True)
+        configparser.RawConfigParser.__init__(self, allow_no_value=True)
 
     def get(self, group, key):
-        val = ConfigParser.RawConfigParser.get(self, group, key)
+        val = configparser.RawConfigParser.get(self, group, key)
 
         # handle things in localised 'Strings'
         if val.endswith('%') and val.startswith('%'):
-            val = ConfigParser.RawConfigParser.get(self, 'Strings', val[1:-1])
+            val = configparser.RawConfigParser.get(self, 'Strings', val[1:-1])
 
         # format multiline comments
         fixed = []
@@ -49,7 +49,7 @@ class InfParser(ConfigParser.RawConfigParser):
                 ln = '%s->%s=%s' % (sect[0].strip(), sect[2].strip(), sect[4].strip())
             contents_new.append(ln)
 
-        buf = StringIO.StringIO('\n'.join(contents_new))
+        buf = io.StringIO('\n'.join(contents_new))
         self.readfp(buf)
 
 def main():

@@ -104,6 +104,9 @@ package { 'python2-flask-login':
 package { 'python-flask-wtf':
     ensure => installed,
 }
+package { 'python-configparser':
+    ensure => installed,
+}
 
 # set up the database
 package { 'mariadb-server':

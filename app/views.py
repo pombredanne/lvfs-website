@@ -8,7 +8,7 @@ import os
 import datetime
 import hashlib
 import math
-import ConfigParser
+import configparser
 
 from gi.repository import AppStreamGlib
 from gi.repository import GCab
@@ -285,7 +285,7 @@ def upload():
         cfg.read_data(contents)
         try:
             tmp = cfg.get('Version', 'Class')
-        except (ConfigParser.NoOptionError, ConfigParser.NoSectionError) as e:
+        except (configparser.NoOptionError, configparser.NoSectionError) as e:
             flash('The inf file Version:Class was missing', 'danger')
             return redirect(request.url)
         if tmp != 'Firmware':
@@ -293,7 +293,7 @@ def upload():
             return redirect(request.url)
         try:
             tmp = cfg.get('Version', 'ClassGuid')
-        except ConfigParser.NoOptionError as e:
+        except configparser.NoOptionError as e:
             flash('The inf file Version:ClassGuid was missing', 'danger')
             return redirect(request.url)
         if tmp != '{f2e7dd72-6468-4e36-b6f1-6488f42c1b52}':
@@ -305,7 +305,7 @@ def upload():
             if len(fw_version_display_inf) != 2:
                 flash('The inf file Version:DriverVer was invalid', 'danger')
                 return redirect(request.url)
-        except ConfigParser.NoOptionError as e:
+        except configparser.NoOptionError as e:
             pass
 
         # this is optional, but if supplied must match the version in the XML
@@ -316,7 +316,7 @@ def upload():
                 fw_version_inf = str(int(fw_version_inf[2:], 16))
             if fw_version_inf == '0':
                 fw_version_inf = None
-        except (ConfigParser.NoOptionError, ConfigParser.NoSectionError) as e:
+        except (configparser.NoOptionError, configparser.NoSectionError) as e:
             pass
 
     # check metainfo exists
