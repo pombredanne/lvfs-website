@@ -276,7 +276,7 @@ def upload():
     fw_version_inf = None
     fw_version_display_inf = None
     for cf in _archive_get_files_from_glob(arc, '*.inf'):
-        contents = cf.get_bytes().get_data()
+        contents = cf.get_bytes().get_data().decode('utf-8', 'ignore')
         if contents.find('FIXME') != -1:
             flash('The inf file was not complete; Any FIXME text must be '
                   'replaced with the correct values.', 'danger')
@@ -346,7 +346,7 @@ def upload():
         component.add_metadata('metainfo_id', hashlib.sha1(contents).hexdigest())
 
         # check the file does not have any missing request.form
-        if contents.find('FIXME') != -1:
+        if contents.decode('utf-8', 'ignore').find('FIXME') != -1:
             flash('The metadata file was not complete; '
                   'Any FIXME text must be replaced with the correct values.',
                   'danger')
