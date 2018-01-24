@@ -77,7 +77,7 @@ class Pluginloader(object):
                     plugin.priority = plugin2.priority + 1
 
         # sort by priority
-        for plugin in plugins.values():
+        for plugin in list(plugins.values()):
             self._plugins.append(plugin)
         self._plugins.sort(key=lambda x: x.priority)
 
