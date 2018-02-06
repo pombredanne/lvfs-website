@@ -10,7 +10,8 @@ import os
 import gnupg
 
 from app.pluginloader import PluginBase, PluginError, PluginSettingText, PluginSettingBool
-from app import db, ploader
+from app import ploader
+from app.util import _get_settings
 from app.util import _get_basename_safe, _archive_add, _archive_get_files_from_glob
 
 class Affidavit(object):
@@ -78,14 +79,14 @@ class Plugin(PluginBase):
 
     def _create_affidavit(self):
         """ Create an affidavit that can be used to sign files """
-        settings = db.settings.get_filtered('sign_gpg_')
-        if settings['enable'] != 'enabled':
+        settings = _get_settings('sign_gpg')
+        if settings['sign_gpg_enable'] != 'enabled':
             return None
-        if not settings['signing_uid']:
+        if not settings['sign_gpg_signing_uid']:
             raise PluginError('No signing UID set')
-        if not settings['keyring_dir']:
+        if not settings['sign_gpg_keyring_dir']:
             raise PluginError('No keyring directory set')
-        return Affidavit(settings['signing_uid'], settings['keyring_dir'])
+        return Affidavit(settings['sign_gpg_signing_uid'], settings['sign_gpg_keyring_dir'])
 
     def _metadata_modified(self, fn):
 

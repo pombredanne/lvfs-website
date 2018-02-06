@@ -10,7 +10,8 @@ import subprocess
 import tempfile
 
 from app.pluginloader import PluginBase, PluginError, PluginSettingText, PluginSettingBool
-from app import db, ploader
+from app import ploader
+from app.util import _get_settings
 from app.util import _get_basename_safe, _archive_add, _archive_get_files_from_glob
 
 class Plugin(PluginBase):
@@ -35,12 +36,12 @@ class Plugin(PluginBase):
     def _sign_blob(self, contents):
 
         # get settings
-        settings = db.settings.get_filtered('sign_pkcs7_')
-        if settings['enable'] != 'enabled':
+        settings = _get_settings('sign_pkcs7')
+        if settings['sign_pkcs7_enable'] != 'enabled':
             return None
-        if not settings['privkey']:
+        if not settings['sign_pkcs7_privkey']:
             raise PluginError('No private key set')
-        if not settings['certificate']:
+        if not settings['sign_pkcs7_certificate']:
             raise PluginError('No certificate set')
 
         # write firmware to temp file
@@ -61,8 +62,8 @@ class Plugin(PluginBase):
 
         # sign
         argv = ['certtool', '--p7-detached-sign', '--p7-time',
-                '--load-privkey', settings['privkey'],
-                '--load-certificate', settings['certificate'],
+                '--load-privkey', settings['sign_pkcs7_privkey'],
+                '--load-certificate', settings['sign_pkcs7_certificate'],
                 '--infile', src.name,
                 '--outfile', dst.name]
         ps = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

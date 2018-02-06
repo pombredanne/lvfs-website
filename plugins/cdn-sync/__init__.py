@@ -10,8 +10,7 @@ import os
 import boto3
 
 from app.pluginloader import PluginBase, PluginError, PluginSettingText, PluginSettingBool
-
-from app import db
+from app.util import _get_settings
 
 class Plugin(PluginBase):
     def __init__(self):
@@ -42,10 +41,10 @@ class Plugin(PluginBase):
     def file_modified(self, fn):
 
         # is the file in the whitelist
-        settings = db.settings.get_filtered('cdn_sync_')
-        if settings['enable'] != 'enabled':
+        settings = _get_settings('cdn_sync')
+        if settings['cdn_sync_enable'] != 'enabled':
             return
-        fns = settings['files']
+        fns = settings['cdn_sync_files']
         if not fns:
             raise PluginError('No file whitelist set')
         basename = os.path.basename(fn)
@@ -54,17 +53,17 @@ class Plugin(PluginBase):
             return
 
         # bucket not set
-        if not settings['bucket']:
+        if not settings['cdn_sync_bucket']:
             raise PluginError('No bucket set')
 
         # upload
         try:
-            key = os.path.join(settings['folder'], os.path.basename(fn))
-            session = boto3.Session(aws_access_key_id=settings['username'],
-                                    aws_secret_access_key=settings['password'],
-                                    region_name=settings['region'])
+            key = os.path.join(settings['cdn_sync_folder'], os.path.basename(fn))
+            session = boto3.Session(aws_access_key_id=settings['cdn_sync_username'],
+                                    aws_secret_access_key=settings['cdn_sync_password'],
+                                    region_name=settings['cdn_sync_region'])
             s3 = session.resource('s3')
-            bucket = s3.Bucket(settings['bucket'])
+            bucket = s3.Bucket(settings['cdn_sync_bucket'])
             bucket.Acl().put(ACL='public-read')
             print("uploading %s as %s" % (fn, key))
             blob = open(fn, 'rb').read()

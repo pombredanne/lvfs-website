@@ -11,7 +11,7 @@
     <td class="col-sm-4 align-middle"><a href="/downloads/{{fw.filename}}">{{orig_filename}}</a></td>
     <td class="col-sm-4 text-right">
 {% if fw.target != 'stable' or g.user.is_qa %}
-      <form method="get" action="/lvfs/firmware/{{firmware_id}}/delete">
+      <form method="get" action="/lvfs/firmware/{{fw.firmware_id}}/delete">
       <button class="btn btn-danger">Delete</button>
       </form>
 {% endif %}
@@ -23,20 +23,20 @@
     <td class="col-sm-4 align-middle text-right">
 {% if g.user.is_qa %}
 {% if fw.target == 'private' %}
-      <form method="get" action="/lvfs/firmware/{{firmware_id}}/promote/embargo">
+      <form method="get" action="/lvfs/firmware/{{fw.firmware_id}}/promote/embargo">
         <button class="btn btn-primary">&#8594; Embargo</button>
       </form>
 {% endif %}
 {% if fw.target == 'embargo' %}
-      <a class="btn btn-secondary" href="/lvfs/firmware/{{firmware_id}}/promote/private" role="button">&#8592; Private</a>
-      <a class="btn btn-primary" href="/lvfs/firmware/{{firmware_id}}/promote/testing" role="button">&#8594; Testing</a>
+      <a class="btn btn-secondary" href="/lvfs/firmware/{{fw.firmware_id}}/promote/private" role="button">&#8592; Private</a>
+      <a class="btn btn-primary" href="/lvfs/firmware/{{fw.firmware_id}}/promote/testing" role="button">&#8594; Testing</a>
 {% endif %}
 {% if fw.target == 'testing' %}
-      <a class="btn btn-secondary" href="/lvfs/firmware/{{firmware_id}}/promote/embargo" role="button">&#8592; Embargo</a>
-      <a class="btn btn-primary" href="/lvfs/firmware/{{firmware_id}}/promote/stable" role="button">&#8594; Stable</a>
+      <a class="btn btn-secondary" href="/lvfs/firmware/{{fw.firmware_id}}/promote/embargo" role="button">&#8592; Embargo</a>
+      <a class="btn btn-primary" href="/lvfs/firmware/{{fw.firmware_id}}/promote/stable" role="button">&#8594; Stable</a>
 {% endif %}
 {% if fw.target == 'stable' %}
-      <a class="btn btn-danger" href="/lvfs/firmware/{{firmware_id}}/promote/testing" role="button">&#8592; Testing</a>
+      <a class="btn btn-danger" href="/lvfs/firmware/{{fw.firmware_id}}/promote/testing" role="button">&#8592; Testing</a>
 {% endif %}
 {% endif %}
     </td>
@@ -47,7 +47,7 @@
   </tr>
   <tr class="row">
     <th class="col-sm-4">Group</th>
-    <td class="col-sm-8" colspan="2"><a href="{{embargo_url}}">{{group_id}}</a></td>
+    <td class="col-sm-8" colspan="2"><a href="{{embargo_url}}">{{fw.group_id}}</a></td>
   </tr>
   <tr class="row">
     <th class="col-sm-4">Uploaded from</th>
@@ -62,9 +62,9 @@
 {% endif %}
   <tr class="row">
     <th class="col-sm-4">Downloads</th>
-    <td class="col-sm-4">{{cnt_fn}}</td>
+    <td class="col-sm-4">{{fw.download_cnt}}</td>
     <td class="col-sm-4 text-right">
-      <form method="get" action="/lvfs/firmware/{{firmware_id}}/analytics">
+      <form method="get" action="/lvfs/firmware/{{fw.firmware_id}}/analytics">
         <button class="btn btn-info">Logs</button>
       </form>
     </td>
@@ -73,7 +73,7 @@
     <th class="col-sm-4">Reports</th>
     <td class="col-sm-4">👍 {{reports_success}} 👎 {{reports_failure}}</td>
     <td class="col-sm-4 text-right">
-      <form method="get" action="/lvfs/firmware/{{firmware_id}}/analytics/reports/2">
+      <form method="get" action="/lvfs/firmware/{{fw.firmware_id}}/analytics/reports/2">
         <button class="btn btn-info">View</button>
       </form>
     </td>
@@ -95,7 +95,7 @@
       <code>{{md.cid}}</code>
     </td>
     <td class="col-sm-4 text-right">
-      <form method="get" action="/lvfs/firmware/{{firmware_id}}/component/{{md.cid}}">
+      <form method="get" action="/lvfs/firmware/{{fw.firmware_id}}/component/{{md.cid}}">
         <button class="btn btn-info">Details</button>
       </form>
     </td>

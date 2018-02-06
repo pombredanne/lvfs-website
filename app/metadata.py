@@ -11,9 +11,12 @@ from gi.repository import AppStreamGlib
 from gi.repository import Gio
 from gi.repository import GLib
 
-from app import app, db, ploader
+from app import app, ploader
 
 from .hash import _qa_hash
+from .models import Firmware, Group
+from .db import db_session
+from .util import _get_settings
 
 def _generate_metadata_kind(filename, fws, firmware_baseuri=''):
     """ Generates AppStream metadata of a specific kind """
@@ -88,7 +91,7 @@ def _generate_metadata_kind(filename, fws, firmware_baseuri=''):
                 component.add_screenshot(ss)
 
             # add requires for each allowed vendor_ids
-            group = db.groups.get_item(fw.group_id)
+            group = db_session.query(Group).filter(Group.group_id == fw.group_id).first()
             if group and group.vendor_ids:
                 req = AppStreamGlib.Require.new()
                 req.set_kind(AppStreamGlib.RequireKind.FIRMWARE)
@@ -130,8 +133,8 @@ def _metadata_update_group(group_id):
     """ updates metadata for a specific group_id """
 
     # get all firmwares in this group
-    settings = db.settings.get_all()
-    firmwares = db.firmware.get_all()
+    settings = _get_settings()
+    firmwares = db_session.query(Firmware).all()
     firmwares_filtered = []
     for f in firmwares:
         if f.target == 'private':
@@ -148,8 +151,8 @@ def _metadata_update_group(group_id):
 
 def _metadata_update_targets(targets):
     """ updates metadata for a specific target """
-    firmwares = db.firmware.get_all()
-    settings = db.settings.get_all()
+    firmwares = db_session.query(Firmware).all()
+    settings = _get_settings()
     for target in targets:
         firmwares_filtered = []
         for f in firmwares:
@@ -177,7 +180,7 @@ def _hashfile(afile, hasher, blocksize=65536):
 def _metadata_update_pulp():
     """ updates metadata for Pulp """
     files_to_scan = ['firmware.xml.gz', 'firmware.xml.gz.asc']
-    for fw in db.firmware.get_all():
+    for fw in db_session.query(Firmware).all():
         if fw.target != 'stable':
             continue
         files_to_scan.append(fw.filename)

@@ -6,6 +6,9 @@
 
 import os
 import json
+import datetime
+
+from sqlalchemy import func, text
 
 from flask import request, url_for, redirect, render_template, flash, Response, g
 from flask_login import login_required
@@ -13,14 +16,14 @@ from flask_login import login_required
 from gi.repository import AppStreamGlib
 from gi.repository import GLib
 
-from app import app, db
+from app import app
+from .db import db_session, _execute_count_star
 
-from .db import CursorError
 from .hash import _qa_hash
 from .metadata import _metadata_update_group, _metadata_update_targets
-from .models import FirmwareRequirement, UserCapability
-from .util import _event_log, _error_internal, _error_permission_denied,\
-    _get_chart_labels_months, _get_chart_labels_days, _validate_guid
+from .models import FirmwareRequirement, UserCapability, Firmware, FirmwareMd, Report, Client
+from .util import _event_log, _error_internal, _error_permission_denied
+from .util import _get_chart_labels_months, _get_chart_labels_days, _validate_guid
 
 def _get_split_names_for_firmware(fw):
     names = []
@@ -41,7 +44,7 @@ def _get_split_names_for_firmware(fw):
 
 @app.route('/lvfs/firmware')
 @login_required
-def firmware_list(show_all=False):
+def firmware(show_all=False):
     """
     Show all previsouly uploaded firmware for this user.
     """
@@ -52,7 +55,7 @@ def firmware_list(show_all=False):
 
     # group by the firmware name
     names = {}
-    for fw in db.firmware.get_all():
+    for fw in db_session.query(Firmware).all():
         # admin can see everything
         if g.user.username != 'admin':
             if fw.group_id != g.user.group_id:
@@ -84,7 +87,7 @@ def firmware_list(show_all=False):
 
 @app.route('/lvfs/firmware_all')
 def firmware_all():
-    return firmware_list(True)
+    return firmware(True)
 
 @app.route('/lvfs/firmware/<firmware_id>/delete')
 def firmware_delete(firmware_id):
@@ -97,10 +100,10 @@ def firmware_modify(firmware_id):
     """ Modifies the update urgency and release notes for the update """
 
     if request.method != 'POST':
-        return redirect(url_for('.firmware_list'))
+        return redirect(url_for('.firmware'))
 
     # find firmware
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal("No firmware %s" % firmware_id)
 
@@ -114,12 +117,12 @@ def firmware_modify(firmware_id):
                 txt = AppStreamGlib.markup_import(txt, AppStreamGlib.MarkupConvertFormat.SIMPLE)
             try:
                 AppStreamGlib.markup_validate(txt)
-            except GLib.GError as e:
+            except GLib.Error as e:
                 return _error_internal("Failed to parse %s: %s" % (txt, str(e)))
             md.release_description = txt
 
     # modify
-    db.firmware.update(fw)
+    db_session.commit()
 
     # log
     _event_log('Changed update description on %s' % firmware_id)
@@ -132,10 +135,10 @@ def firmware_modify_requirements(firmware_id):
     """ Modifies the update urgency and release notes for the update """
 
     if request.method != 'POST':
-        return redirect(url_for('.firmware_list'))
+        return redirect(url_for('.firmware'))
 
     # find firmware
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal("No firmware %s" % firmware_id)
 
@@ -156,7 +159,7 @@ def firmware_modify_requirements(firmware_id):
                 md.requirements.append(fwreq)
 
     # modify
-    db.firmware.update(fw)
+    db_session.commit()
 
     # log
     _event_log('Changed requirements on %s' % firmware_id)
@@ -169,7 +172,7 @@ def firmware_delete_force(firmware_id):
     """ Delete a firmware entry and also delete the file from disk """
 
     # check firmware exists in database
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal("No firmware file with hash %s exists" % firmware_id)
     if not g.user.check_group_id(fw.group_id):
@@ -179,8 +182,9 @@ def firmware_delete_force(firmware_id):
     if not g.user.is_qa and fw.target == 'stable':
         return _error_permission_denied('Unable to delete stable firmware as not QA')
 
-    # delete id from database
-    db.firmware.remove(firmware_id)
+    # delete from database: FIXME delete mds too
+    db_session.delete(fw)
+    db_session.commit()
 
     # delete file
     path = os.path.join(app.config['DOWNLOAD_DIR'], fw.filename)
@@ -195,7 +199,7 @@ def firmware_delete_force(firmware_id):
         _metadata_update_targets(targets=['testing'])
 
     _event_log("Deleted firmware %s" % firmware_id)
-    return redirect(url_for('.firmware_list'))
+    return redirect(url_for('.firmware'))
 
 @app.route('/lvfs/firmware/<firmware_id>/promote/<target>')
 @login_required
@@ -214,12 +218,14 @@ def firmware_promote(firmware_id, target):
         return _error_internal("Target %s invalid" % target)
 
     # check firmware exists in database
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal('No firmware matched!')
     if not g.user.check_group_id(fw.group_id):
         return _error_permission_denied("No QA access to %s" % firmware_id)
-    db.firmware.set_target(firmware_id, target)
+    fw.target = target
+    db_session.commit()
+
     # set correct response code
     _event_log("Moved firmware %s to %s" % (firmware_id, target))
 
@@ -240,7 +246,7 @@ def firmware_show(firmware_id):
     """ Show firmware information """
 
     # get details about the firmware
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal('No firmware matched!')
 
@@ -253,23 +259,34 @@ def firmware_show(firmware_id):
     # get the reports for this firmware
     reports_success = 0
     reports_failure = 0
-    reports = db.reports.get_all_for_firmware_id(firmware_id, limit=0)
+    reports = db_session.query(Report).filter(Report.firmware_id == firmware_id).all()
     for r in reports:
         if r.state == 2:
             reports_success += 1
         elif r.state == 3:
             reports_failure += 1
-
-    cnt_fn = db.clients.get_firmware_count_filename(fw.filename)
     return render_template('firmware-details.html',
                            fw=fw,
                            orig_filename='-'.join(fw.filename.split('-')[1:]),
                            embargo_url=embargo_url,
-                           group_id=fw.group_id,
-                           cnt_fn=cnt_fn,
                            reports_success=reports_success,
-                           reports_failure=reports_failure,
-                           firmware_id=firmware_id)
+                           reports_failure=reports_failure)
+
+def _get_stats_for_fn(size, interval, filename):
+    """ Gets stats data """
+
+    # yes, there's probably a way to do this in one query...
+    data = []
+    now = datetime.date.today()
+    for i in range(size):
+        start = now - datetime.timedelta((i * interval) + interval - 1)
+        end = now - datetime.timedelta((i * interval) - 1)
+        cnt = _execute_count_star(db_session.query(Client).\
+                    filter(Client.filename == filename).\
+                    filter(Client.timestamp >= start).\
+                    filter(Client.timestamp < end))
+        data.append(int(cnt))
+    return data
 
 @app.route('/lvfs/firmware/<firmware_id>/analytics/year')
 @login_required
@@ -277,7 +294,7 @@ def firmware_analytics_year(firmware_id):
     """ Show firmware analytics information """
 
     # get details about the firmware
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal('No firmware matched!')
 
@@ -285,7 +302,7 @@ def firmware_analytics_year(firmware_id):
     if not g.user.check_group_id(fw.group_id):
         return _error_permission_denied('Unable to view other vendor firmware')
 
-    data_fw = db.clients.get_stats_for_fn(12, 30, fw.filename)
+    data_fw = _get_stats_for_fn(12, 30, fw.filename)
     return render_template('firmware-analytics-year.html',
                            fw=fw,
                            firmware_id=firmware_id,
@@ -299,14 +316,15 @@ def firmware_analytics_clients(firmware_id):
     """ Show firmware clients information """
 
     # get details about the firmware
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal('No firmware matched!')
 
     # we can only view our own firmware, unless admin
     if not g.user.check_group_id(fw.group_id):
         return _error_permission_denied('Unable to view other vendor firmware')
-    clients = db.clients.get_all_for_filename(fw.filename)
+    clients = db_session.query(Client).filter(Client.filename == fw.filename).\
+                order_by(Client.id.desc()).limit(10).all()
     return render_template('firmware-analytics-clients.html',
                            fw=fw,
                            firmware_id=firmware_id,
@@ -319,24 +337,25 @@ def firmware_analytics_reports(firmware_id, state=None):
     """ Show firmware clients information """
 
     # get reports about the firmware
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal('No firmware matched!')
 
     # we can only view our own firmware, unless admin
     if not g.user.check_group_id(fw.group_id):
         return _error_permission_denied('Unable to view other vendor firmware')
-    reports = db.reports.get_all_for_firmware_id(firmware_id)
-    reports_filtered = []
-    for r in reports:
-        if state and r.state != state:
-            continue
-        reports_filtered.append(r)
+    if state:
+        reports = db_session.query(Report).\
+                    filter(Report.firmware_id == firmware_id).\
+                    filter(Report.state == state).all()
+    else:
+        reports = db_session.query(Report).\
+                    filter(Report.firmware_id == firmware_id).all()
     return render_template('firmware-analytics-reports.html',
                            fw=fw,
                            state=state,
                            firmware_id=firmware_id,
-                           reports=reports_filtered)
+                           reports=reports)
 
 @app.route('/lvfs/firmware/<firmware_id>/analytics/month')
 @login_required
@@ -344,7 +363,7 @@ def firmware_analytics_month(firmware_id):
     """ Show firmware analytics information """
 
     # get details about the firmware
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal('No firmware matched!')
 
@@ -352,7 +371,7 @@ def firmware_analytics_month(firmware_id):
     if not g.user.check_group_id(fw.group_id):
         return _error_permission_denied('Unable to view other vendor firmware')
 
-    data_fw = db.clients.get_stats_for_fn(30, 1, fw.filename)
+    data_fw = _get_stats_for_fn(30, 1, fw.filename)
     return render_template('firmware-analytics-month.html',
                            fw=fw,
                            firmware_id=firmware_id,
@@ -372,7 +391,7 @@ def firmware_component_show(firmware_id, cid, page='overview'):
     """ Show firmware component information """
 
     # get firmware component
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal('No firmware matched!')
     md = _item_filter_by_cid(fw, cid)
@@ -393,9 +412,11 @@ def firmware_component_show(firmware_id, cid, page='overview'):
 def telemetry_repair():
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Not admin user')
-    for fw in db.firmware.get_all():
-        cnt = db.clients.get_firmware_count_filename(fw.filename)
-        db.firmware.set_download_count(fw.firmware_id, cnt)
+    for fw in db_session.query(Firmware).all():
+        q = db_session.query(Client).filter(Client.filename == fw.filename)
+        count_q = q.statement.with_only_columns([func.count()]).order_by(None)
+        fw.download_cnt = q.session.execute(count_q).scalar()
+    db_session.commit()
     return redirect(url_for('.telemetry'))
 
 @app.route('/lvfs/telemetry/<int:age>/<sort_key>/<sort_direction>')
@@ -415,8 +436,8 @@ def telemetry(age=0, sort_key='downloads', sort_direction='up'):
     total_success = 0
     total_failed = 0
     show_duplicate_warning = False
-    firmware = []
-    for fw in db.firmware.get_all():
+    fwlines = []
+    for fw in db_session.query(Firmware).all():
 
         # not allowed to view
         if not g.user.check_capability(UserCapability.Admin) and fw.group_id != g.user.group_id:
@@ -429,11 +450,22 @@ def telemetry(age=0, sort_key='downloads', sort_direction='up'):
         # reports
         if age == 0:
             cnt_download = fw.download_cnt
+            rpts = db_session.query(Report).\
+                        filter(Report.firmware_id == fw.firmware_id).all()
         else:
-            cnt_download = db.clients.get_firmware_count_filename(fw.filename, age)
+            cnt_download = _execute_count_star(db_session.query(Client).\
+                                filter(Client.filename == fw.filename).\
+                                filter(func.timestampdiff(text('DAY'),
+                                                          Client.timestamp,
+                                                          func.current_timestamp()) < age))
+            rpts = db_session.query(Report).\
+                        filter(Report.firmware_id == fw.firmware_id).\
+                        filter(func.timestampdiff(text('DAY'),
+                                                  Report.timestamp,
+                                                  func.current_timestamp()) < age).all()
+
         cnt_success = 0
         cnt_failed = 0
-        rpts = db.reports.get_all_for_firmware_id(fw.firmware_id, age=age, limit=0)
         for rpt in rpts:
             if rpt.state == 2:
                 cnt_success += 1
@@ -456,23 +488,23 @@ def telemetry(age=0, sort_key='downloads', sort_direction='up'):
         res['firmware_id'] = fw.firmware_id
         res['target'] = fw.target
         res['duplicate'] = len(fw.mds)
-        firmware.append(res)
+        fwlines.append(res)
 
         # show the user a warning
         if len(fw.mds) > 1:
             show_duplicate_warning = True
 
     if sort_direction == 'down':
-        firmware.sort(key=lambda x: x['downloads'])
-        firmware.sort(key=lambda x: x[sort_key])
+        fwlines.sort(key=lambda x: x['downloads'])
+        fwlines.sort(key=lambda x: x[sort_key])
     else:
-        firmware.sort(key=lambda x: x['downloads'], reverse=True)
-        firmware.sort(key=lambda x: x[sort_key], reverse=True)
+        fwlines.sort(key=lambda x: x['downloads'], reverse=True)
+        fwlines.sort(key=lambda x: x[sort_key], reverse=True)
     return render_template('telemetry.html',
                            age=age,
                            sort_key=sort_key,
                            sort_direction=sort_direction,
-                           firmware=firmware,
+                           firmware=fwlines,
                            group_id=g.user.group_id,
                            show_duplicate_warning=show_duplicate_warning,
                            total_failed=total_failed,
@@ -484,7 +516,7 @@ def telemetry(age=0, sort_key='downloads', sort_direction='up'):
 def firmware_component_requires_remove_hwid(firmware_id, cid, hwid):
 
     # get firmware component
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal('No firmware matched!')
     md = _item_filter_by_cid(fw, cid)
@@ -500,7 +532,7 @@ def firmware_component_requires_remove_hwid(firmware_id, cid, hwid):
     md.requirements.remove(fwreq)
 
     # modify
-    db.firmware.update(fw)
+    db_session.commit()
 
     # log
     _event_log('Removed HWID %s on %s' % (hwid, firmware_id))
@@ -515,7 +547,7 @@ def firmware_component_requires_add_hwid(firmware_id, cid):
     """ Modifies the update urgency and release notes for the update """
 
     # get firmware component
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal('No firmware matched!')
     md = _item_filter_by_cid(fw, cid)
@@ -540,7 +572,7 @@ def firmware_component_requires_add_hwid(firmware_id, cid):
     else:
         fwreq = FirmwareRequirement('hardware', hwid)
         md.requirements.append(fwreq)
-        db.firmware.update(fw)
+        db_session.commit() # FIXME verify this
         _event_log('Added HWID %s on %s' % (hwid, firmware_id))
     return redirect(url_for('.firmware_component_show',
                             firmware_id=firmware_id,
@@ -553,7 +585,7 @@ def firmware_component_requires_set(firmware_id, cid, kind, value):
     """ Modifies the update urgency and release notes for the update """
 
     # get firmware component
-    fw = db.firmware.get_item(firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == firmware_id).first()
     if not fw:
         return _error_internal('No firmware matched!')
     md = _item_filter_by_cid(fw, cid)
@@ -581,7 +613,7 @@ def firmware_component_requires_set(firmware_id, cid, kind, value):
             md.requirements.append(fwreq)
         fwreq.compare = request.form['compare']
         fwreq.version = request.form['version']
-    db.firmware.update(fw)
+    db_session.commit() # fixme, not going to work
     _event_log('Changed %s/%s requirement on %s' % (kind, value, firmware_id))
     return redirect(url_for('.firmware_component_show',
                             firmware_id=firmware_id,
@@ -654,30 +686,36 @@ def firmware_report():
                 return json_error('missing data, expected %s' % key)
         checksum = report['Checksum']
         report_metadata = report['Metadata']
-        try:
-            # try to find the firmware_id (which might not exist on this server)
-            firmware_id = db.firmware.get_id_from_container_checksum(checksum)
-            if not firmware_id:
-                msgs.append('%s did not match any known firmware archive' % checksum)
+
+        # try to find the firmware_id (which might not exist on this server)
+        md = db_session.query(FirmwareMd).filter(FirmwareMd.checksum_container == checksum).first()
+        if not md:
+            msgs.append('%s did not match any known firmware archive' % checksum)
+            continue
+
+        # remove any old report
+        report = db_session.query(Report).\
+                    filter(Report.checksum == checksum).\
+                    filter(Report.machine_id == machine_id).first()
+        if report:
+            msgs.append('%s replaces old report' % checksum)
+            db_session.delete(report)
+
+        # copy shared metadata
+        for key in metadata:
+            if key in report_metadata:
                 continue
-            # remove any old report
-            report_old = db.reports.find_by_id_checksum(machine_id, checksum)
-            if report_old:
-                msgs.append('%s replaces old report' % checksum)
-                db.reports.remove_by_id(report_old.id)
+            report_metadata[key] = metadata[key]
 
-            # copy shared metadata
-            for key in metadata:
-                if key in report_metadata:
-                    continue
-                report_metadata[key] = metadata[key]
-
-            # save in the database
-            json_raw = json.dumps(report, sort_keys=True,
-                                  indent=2, separators=(',', ': '))
-            db.reports.add(report['UpdateState'], machine_id, firmware_id, checksum, json_raw)
-        except CursorError as e:
-            return json_error(str(e))
+        # save in the database
+        json_raw = json.dumps(report, sort_keys=True,
+                              indent=2, separators=(',', ': '))
+        db_session.add(Report(machine_id=machine_id,
+                              firmware_id=md.firmware_id,
+                              state=report['UpdateState'],
+                              checksum=checksum,
+                              json=json_raw))
+        db_session.commit()
 
     # get a message on one line
     if len(msgs) > 0:

@@ -7,10 +7,11 @@
 from flask import render_template, g
 from flask_login import login_required
 
-from app import app, db
+from app import app
+from .db import db_session
 
 from .util import _error_permission_denied
-from .models import UserCapability
+from .models import UserCapability, Firmware
 
 @app.route('/lvfs/device')
 @login_required
@@ -26,7 +27,7 @@ def device():
     # get all the guids we can target
     devices = []
     seen_guid = {}
-    for fw in db.firmware.get_all():
+    for fw in db_session.query(Firmware).all():
         for md in fw.mds:
             if md.guids[0] in seen_guid:
                 continue
@@ -43,7 +44,7 @@ def device_guid(guid):
 
     # get all the guids we can target
     fws = []
-    for fw in db.firmware.get_all():
+    for fw in db_session.query(Firmware).all():
         if not fw.mds:
             continue
         for md in fw.mds:
@@ -59,7 +60,7 @@ def device_guid(guid):
 def device_list():
 
     # get a sorted list of vendors
-    fws = db.firmware.get_all()
+    fws = db_session.query(Firmware).all()
     vendors = []
     for fw in fws:
         if fw.target not in ['stable', 'testing']:

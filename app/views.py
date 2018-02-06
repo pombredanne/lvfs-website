@@ -1,7 +1,7 @@
 #!/usr/bin/python2
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2017 Richard Hughes <richard@hughsie.com>
+# Copyright (C) 2015-2018 Richard Hughes <richard@hughsie.com>
 # Licensed under the GNU General Public License Version 2
 
 from __future__ import print_function
@@ -18,12 +18,14 @@ from flask import session, request, flash, url_for, redirect, render_template, R
 from flask import send_from_directory, abort, make_response, g
 from flask_login import login_required, login_user, logout_user
 
-from app import app, db, lm, ploader
+from app import app, lm, ploader
+from .db import db_session, _execute_count_star
 
-from .models import Firmware, FirmwareMd, FirmwareRequirement, DownloadKind, UserCapability
+from .models import Group, Setting, User, Firmware, FirmwareMd, FirmwareRequirement
+from .models import DownloadKind, UserCapability, Analytic, Client, Report, EventLogItem, _get_datestr_from_datetime
 from .uploadedfile import UploadedFile, FileTooLarge, FileTooSmall, FileNotSupported, MetadataInvalid
-from .hash import _qa_hash, _password_hash
-from .util import _event_log, _get_client_address
+from .hash import _qa_hash, _password_hash, _addr_hash
+from .util import _event_log, _get_client_address, _get_settings
 from .util import _error_internal, _error_permission_denied
 from .util import _get_chart_labels_months, _get_chart_labels_days
 from .metadata import _metadata_update_group, _metadata_update_targets, _metadata_update_pulp
@@ -44,10 +46,30 @@ def serveStaticResource(resource):
 
     # log certain kinds of files
     if resource.endswith('.cab'):
-        db.clients.add(datetime.date.today(), DownloadKind.FIRMWARE)
-        db.clients.increment(_get_client_address(),
-                             os.path.basename(resource),
-                             user_agent)
+
+        # increment the firmware download counter
+        fw = db_session.query(Firmware).\
+                filter(Firmware.filename == os.path.basename(resource)).first()
+        if not fw:
+            abort(404)
+        fw.download_cnt += 1
+
+        # either update the analytics counter, or create one for that day
+        analytic_tmp = Analytic(DownloadKind.FIRMWARE)
+        analytic = db_session.query(Analytic).\
+                        filter(Analytic.kind == analytic_tmp.kind).\
+                        filter(Analytic.datestr == analytic_tmp.datestr).\
+                        first()
+        if analytic:
+            analytic.cnt += 1
+        else:
+            db_session.add(analytic_tmp)
+
+        # log the client request
+        db_session.add(Client(addr=_addr_hash(_get_client_address()),
+                              filename=fw.filename,
+                              user_agent=user_agent))
+        db_session.commit()
 
     # firmware blobs
     if resource.startswith('downloads/'):
@@ -123,8 +145,8 @@ def vendors():
 @app.route('/')
 @app.route('/lvfs/')
 def index():
-    user = db.users.get_item('admin')
-    settings = db.settings.get_all()
+    user = db_session.query(User).filter(User.username == 'admin').first()
+    settings = _get_settings()
     default_admin_password = False
     if user and user.password == '5459dbe5e9aa80e077bfa40f3fb2ca8368ed09b4':
         default_admin_password = True
@@ -148,7 +170,7 @@ def metadata_remote(qa_group):
     """
 
     # find the Group
-    if not db.groups.get_item(qa_group):
+    if not db_session.query(Group).filter(Group.group_id == qa_group).first():
         return _error_internal('No QA Group')
 
     # generate file
@@ -175,7 +197,7 @@ def metadata_view():
     # show all embargo metadata URLs when admin user
     group_ids = []
     if g.user.check_capability('admin'):
-        for group in db.groups.get_all():
+        for group in db_session.query(Group).all():
             group_ids.append(group.group_id)
     else:
         group_ids.append(g.user.group_id)
@@ -193,7 +215,7 @@ def upload():
         if 'username' not in session:
             return redirect(url_for('.index'))
         vendor_ids = []
-        grp = db.groups.get_item(g.user.group_id)
+        grp = db_session.query(Group).filter(Group.group_id == g.user.group_id).first()
         if grp:
             vendor_ids.extend(grp.vendor_ids)
         return render_template('upload.html', vendor_ids=vendor_ids)
@@ -221,13 +243,13 @@ def upload():
         return redirect(request.url)
 
     # check the file does not already exist
-    fw = db.firmware.get_item(ufile.firmware_id)
+    fw = db_session.query(Firmware).filter(Firmware.firmware_id == ufile.firmware_id).first()
     if fw:
         flash('A firmware file with hash %s already exists' % fw.firmware_id, 'danger')
         return redirect('/lvfs/firmware/%s' % fw.firmware_id)
 
     # check the guid and version does not already exist
-    fws = db.firmware.get_all()
+    fws = db_session.query(Firmware).all()
     for component in ufile.get_components():
         provides_value = component.get_provides()[0].get_value()
         release_default = component.get_release_default()
@@ -257,7 +279,7 @@ def upload():
                         return redirect(request.url)
 
     # allow plugins to add files
-    settings = db.settings.get_all()
+    settings = _get_settings()
     metadata = {}
     metadata['$DATE$'] = datetime.datetime.now().replace(microsecond=0).isoformat()
     metadata['$FWUPD_MIN_VERSION$'] = ufile.fwupd_min_version
@@ -346,7 +368,8 @@ def upload():
         fw.mds.append(md)
 
     # add to database
-    db.firmware.add(fw)
+    db_session.add(fw)
+    db_session.commit()
 
     # set correct response code
     _event_log("Uploaded file %s to %s" % (ufile.filename_new, target))
@@ -370,11 +393,27 @@ def analytics_month():
     # security check
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to view analytics')
-    labels_days = _get_chart_labels_days()[::-1]
-    data_days = db.clients.get_stats_for_month(DownloadKind.FIRMWARE)[::-1]
+
+    # this is somewhat klunky
+    data = []
+    now = datetime.date.today()
+    for i in range(30):
+        datestr = _get_datestr_from_datetime(now)
+        analytic = db_session.query(Analytic).\
+                        filter(Analytic.kind == DownloadKind.FIRMWARE).\
+                        filter(Analytic.datestr == datestr).\
+                        first()
+        if analytic:
+            data.append(int(analytic.cnt))
+        else:
+            data.append(0)
+
+        # back one day
+        now -= datetime.timedelta(days=1)
+
     return render_template('analytics-month.html',
-                           labels_days=labels_days,
-                           data_days=data_days)
+                           labels_days=_get_chart_labels_days()[::-1],
+                           data_days=data[::-1])
 
 @app.route('/lvfs/analytics/year')
 @login_required
@@ -384,11 +423,29 @@ def analytics_year():
     # security check
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to view analytics')
-    labels_months = _get_chart_labels_months()[::-1]
-    data_months = db.clients.get_stats_for_year(DownloadKind.FIRMWARE)[::-1]
+
+    # this is somewhat klunky
+    data = []
+    now = datetime.date.today()
+    for i in range(12):
+        datestrold = _get_datestr_from_datetime(now)
+        now -= datetime.timedelta(days=30)
+        datestrnew = _get_datestr_from_datetime(now)
+        analytics = db_session.query(Analytic).\
+                        filter(Analytic.kind == DownloadKind.FIRMWARE).\
+                        filter(Analytic.datestr < datestrold).\
+                        filter(Analytic.datestr > datestrnew).\
+                        all()
+
+        # sum up all the totals for each day in that month
+        cnt = 0
+        for analytic in analytics:
+            cnt += analytic.cnt
+        data.append(int(cnt))
+
     return render_template('analytics-year.html',
-                           labels_months=labels_months,
-                           data_months=data_months)
+                           labels_months=_get_chart_labels_months()[::-1],
+                           data_months=data[::-1])
 
 @app.route('/lvfs/analytics/user_agent')
 @login_required
@@ -398,10 +455,30 @@ def analytics_user_agents():
     # security check
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to view analytics')
-    labels_user_agent, data_user_agent = db.clients.get_user_agent_stats()
+
+    # dedupe
+    dedupe = {}
+    for user_agent in db_session.query(Client).\
+                            with_entities(Client.user_agent).\
+                            filter(Client.user_agent != None).all():
+        chunk = user_agent[0].split(' ')[0]
+        if not chunk in dedupe:
+            dedupe[chunk] = 1
+            continue
+        dedupe[chunk] += 1
+
+    # get top user_agent strings
+    labels = []
+    data = []
+    for key, value in sorted(dedupe.iteritems(), key=lambda (k, v): (v, k), reverse=True):
+        labels.append(str(key.replace('/', ' ')))
+        data.append(value)
+        if len(data) >= 7:
+            break
+
     return render_template('analytics-user-agent.html',
-                           labels_user_agent=labels_user_agent,
-                           data_user_agent=data_user_agent)
+                           labels_user_agent=labels,
+                           data_user_agent=data)
 
 @app.route('/lvfs/analytics/clients')
 @login_required
@@ -411,7 +488,7 @@ def analytics_clients():
     # security check
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to view analytics')
-    clients = db.clients.get_all(limit=25)
+    clients = db_session.query(Client).limit(25).all()
     return render_template('analytics-clients.html', clients=clients)
 
 @app.route('/lvfs/analytics/reports')
@@ -422,7 +499,7 @@ def analytics_reports():
     # security check
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to view analytics')
-    reports = db.reports.get_all(limit=25)
+    reports = db_session.query(Report).limit(25).all()
     return render_template('analytics-reports.html', reports=reports)
 
 @app.route('/lvfs/report/<report_id>')
@@ -430,7 +507,7 @@ def analytics_reports():
 def report_view(report_id):
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to view report')
-    rprt = db.reports.find_by_id(report_id)
+    rprt = db_session.query(Report).filter(Report.report_id == report_id).first()
     if not rprt:
         return _error_permission_denied('Report does not exist')
     return Response(response=rprt.json,
@@ -442,16 +519,21 @@ def report_view(report_id):
 def report_delete(report_id):
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to view report')
-    db.reports.remove_by_id(report_id)
+    report = db_session.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        return _error_internal('No report found!')
+    db_session.delete(report)
+    db_session.commit()
     return redirect(url_for('.analytics_reports'))
 
 @app.route('/lvfs/login', methods=['POST'])
 def login():
     """ A login screen to allow access to the LVFS main page """
     # auth check
-    user = None
     password = _password_hash(request.form['password'])
-    user = db.users.get_item(request.form['username'], password)
+    user = db_session.query(User).\
+            filter(User.username == request.form['username']).\
+            filter(User.password == password).first()
     if not user:
         # log failure
         _event_log('Failed login attempt for %s' % request.form['username'])
@@ -492,16 +574,22 @@ def eventlog(start=0, length=20):
 
     # get the page selection correct
     if g.user.check_capability('admin'):
-        eventlog_len = db.eventlog.size()
+        eventlog_len = _execute_count_star(db_session.query(EventLogItem))
     else:
-        eventlog_len = db.eventlog.size_for_group_id(g.user.group_id)
+        eventlog_len = _execute_count_star(db_session.query(EventLogItem).\
+                            filter(EventLogItem.group_id == g.user.group_id))
     nr_pages = int(math.ceil(eventlog_len / float(length)))
 
     # table contents
     if g.user.check_capability(UserCapability.Admin):
-        events = db.eventlog.get_all(int(start), int(length))
+        events = db_session.query(EventLogItem).\
+                        order_by(EventLogItem.id.desc()).\
+                        offset(start).limit(length).all()
     else:
-        events = db.eventlog.get_all_for_group_id(g.user.group_id, int(start), int(length))
+        events = db_session.query(EventLogItem).\
+                        filter(EventLogItem.group_id == g.user.group_id).\
+                        order_by(EventLogItem.id.desc()).\
+                        offset(start).limit(length).all()
     if len(events) == 0:
         return _error_internal('No event log available!')
 
@@ -545,12 +633,13 @@ def settings_view(plugin_id='general'):
         return _error_permission_denied('Only admin is allowed to change settings')
 
     # get all settings
-    settings = db.settings.get_all()
+    settings = _get_settings()
     plugins = ploader.get_all()
     for p in plugins:
         for s in p.settings():
             if s.key not in settings:
-                db.settings.add(s.key, s.default)
+                db_session.add(Setting(s.key, s.default))
+    db_session.commit()
     return render_template('settings.html',
                            settings=settings,
                            plugin_id=plugin_id,
@@ -571,12 +660,14 @@ def settings_modify(plugin_id='general'):
         return _error_permission_denied('Unable to modify settings as non-admin')
 
     # save new values
-    settings = db.settings.get_all()
+    settings = _get_settings()
     for key in request.form:
         if settings[key] == request.form[key]:
             continue
-        _event_log('Changed server settings %s to %s' % (key, request.form[key]))
-        db.settings.modify(key, request.form[key])
+        setting = db_session.query(Setting).filter(Setting.key == key).first()
+        setting.value = request.form[key]
+        _event_log('Changed server settings %s to %s' % (key, setting.value))
+    db_session.commit()
     flash('Updated settings', 'info')
     return redirect(url_for('.settings_view', plugin_id=plugin_id), 302)
 
@@ -592,7 +683,7 @@ def metadata_rebuild():
         return _error_permission_denied('Only admin is allowed to force-rebuild metadata')
 
     # update metadata
-    for group in db.groups.get_all():
+    for group in db_session.query(Group).all():
         _metadata_update_group(group.group_id)
     _metadata_update_targets(['stable', 'testing'])
     _metadata_update_pulp()
