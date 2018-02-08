@@ -507,7 +507,7 @@ def analytics_reports():
 def report_view(report_id):
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to view report')
-    rprt = db_session.query(Report).filter(Report.report_id == report_id).first()
+    rprt = db_session.query(Report).filter(Report.id == report_id).first()
     if not rprt:
         return _error_permission_denied('Report does not exist')
     return Response(response=rprt.json,

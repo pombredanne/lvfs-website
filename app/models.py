@@ -8,7 +8,7 @@ import datetime
 
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from .db import Base, db_session
+from .db import Base
 
 class UserCapability(object):
     Admin = 'admin'
@@ -294,24 +294,24 @@ class FirmwareMd(Base):
         self.release_urgency = None
         self.screenshot_url = None
         self.screenshot_caption = None
-        self.requirements = []              # requirements, e.g. "id/fwupd/ge/0.8.2"
+        self.requirements = ''              # requirements, e.g. "id/fwupd/ge/0.8.2"
         self.metainfo_id = None             # SHA1 of the metainfo.xml file
 
-    @property
-    def requirements(self):
-        reqs = []
-        for fwreq_str in self.requirements.split(','):
-            fwreq = FirmwareRequirement()
-            fwreq.from_string(fwreq_str)
-            reqs.append(fwreq)
-        return reqs
+#    @property
+#    def requirements(self):
+#        reqs = []
+#        for fwreq_str in self.requirements.split(','):
+#            fwreq = FirmwareRequirement()
+#            fwreq.from_string(fwreq_str)
+#            reqs.append(fwreq)
+#        return reqs
 
-    @requirements.setter
-    def requirements(self, value):
-        reqstrs = []
-        for fwreq in value:
-            reqstrs.append(fwreq.to_string)
-        return ','.join(reqstrs)
+#    @requirements.setter
+#    def set_requirements(self, value):
+#        reqstrs = []
+#        for fwreq in value:
+#            reqstrs.append(fwreq.to_string)
+#        return ','.join(reqstrs)
 
     def find_fwreq(self, kind=None, value=None):
         """ Find a FirmwareRequirement from the kind and/or value """
