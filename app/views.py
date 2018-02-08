@@ -350,7 +350,7 @@ def upload():
                                         req.get_value(),
                                         AppStreamGlib.Require.compare_to_string(req.get_compare()),
                                         req.get_version())
-            md.requirements.append(fwreq)
+            # md.requirements.append(fwreq) FIXME
 
         # from the first screenshot
         if len(component.get_screenshots()) > 0:

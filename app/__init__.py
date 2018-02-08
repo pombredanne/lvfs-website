@@ -22,7 +22,8 @@ if os.path.exists('app/custom.cfg'):
     app.config.from_pyfile('custom.cfg')
 else:
     app.config.from_pyfile('flaskapp.cfg')
-app.config.from_envvar('LVFS_CUSTOM_SETTINGS')
+if 'LVFS_CUSTOM_SETTINGS' in os.environ:
+    app.config.from_envvar('LVFS_CUSTOM_SETTINGS')
 
 db = Database()
 db.init_app(app)
