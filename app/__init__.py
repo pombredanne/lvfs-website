@@ -16,8 +16,8 @@ from .pluginloader import Pluginloader
 from .util import _error_internal
 
 app = Flask(__name__)
-app.response_class = SecureResponse
 if os.path.exists('app/custom.cfg'):
+    app.response_class = SecureResponse
     app.config.from_pyfile('custom.cfg')
 else:
     app.config.from_pyfile('flaskapp.cfg')
