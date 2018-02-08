@@ -8,42 +8,51 @@ import os
 import unittest
 import tempfile
 
-import app as lvfs
-from app.db import init_db
-
 class LvfsTestCase(unittest.TestCase):
 
     def setUp(self):
-        self.db_fd, lvfs.app.config['DATABASE_FN'] = tempfile.mkstemp()
-        lvfs.app.config['DATABASE'] = 'sqlite:///' + lvfs.app.config['DATABASE_FN']
-        lvfs.app.testing = True
+
+        # create new database
+        self.db_fd, self.db_filename = tempfile.mkstemp()
+        self.db_uri = 'sqlite:///' + self.db_filename
+
+        # write out custom settings file
+        self.cfg_filename = '/tmp/foo.cfg'
+        cfgfile = open(self.cfg_filename,'w')
+        cfgfile.write("DATABASE = '%s'\nTESTING = True\n" % self.db_uri)
+        cfgfile.close()
+        os.environ['LVFS_CUSTOM_SETTINGS'] = self.cfg_filename
+
+        # create instance
+        import app as lvfs
+        from app import db
         self.app = lvfs.app.test_client()
         with lvfs.app.app_context():
-            init_db()
+            db.init_db()
 
     def tearDown(self):
         os.close(self.db_fd)
-        os.unlink(lvfs.app.config['DATABASE_FN'])
+        os.unlink(self.db_filename)
+        os.unlink(self.cfg_filename)
 
     def login(self, username, password):
-        return self.app.post('/login', data=dict(
+        return self.app.post('/lvfs/login', data=dict(
             username=username,
             password=password
         ), follow_redirects=True)
 
     def logout(self):
-        return self.app.get('/logout', follow_redirects=True)
+        return self.app.get('/lvfs/logout', follow_redirects=True)
 
     def test_login_logout(self):
-        rv = self.login('admin', 'P@$$w0rd')
-        print(rv.data)
-        assert b'You were logged in' in rv.data
+        rv = self.login('admin', 'Pa$$w0rd')
+        assert b'/lvfs/upload' in rv.data
         rv = self.logout()
-        assert b'You were logged out' in rv.data
+        assert b'/lvfs/upload' not in rv.data
         rv = self.login('adminx', 'default')
-        assert b'Invalid username' in rv.data
+        assert b'Incorrect username or password' in rv.data
         rv = self.login('admin', 'defaultx')
-        assert b'Invalid password' in rv.data
+        assert b'Incorrect username or password' in rv.data
 
     def test_nologin_required(self):
         uris = ['/',

@@ -8,7 +8,8 @@ import datetime
 
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from .db import Base
+
+from app import db
 
 class UserCapability(object):
     Admin = 'admin'
@@ -16,7 +17,7 @@ class UserCapability(object):
     Analyst = 'analyst'
     User = 'user'
 
-class User(Base):
+class User(db.Base):
 
     # database
     __tablename__ = 'users'
@@ -111,7 +112,7 @@ class User(Base):
     def __repr__(self):
         return "User object %s" % self.username
 
-class Group(Base):
+class Group(db.Base):
 
     # sqlalchemy metadata
     __tablename__ = 'groups'
@@ -134,7 +135,7 @@ class Group(Base):
     def __repr__(self):
         return "Group object %s" % self.group_id
 
-class Vendor(Base):
+class Vendor(db.Base):
 
     # sqlalchemy metadata
     __tablename__ = 'vendors'
@@ -178,7 +179,7 @@ class Vendor(Base):
     def __repr__(self):
         return "Vendor object %s" % self.group_id
 
-class EventLogItem(Base):
+class EventLogItem(db.Base):
 
     # sqlalchemy metadata
     __tablename__ = 'event_log'
@@ -186,7 +187,7 @@ class EventLogItem(Base):
     timestamp = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
     username = Column(String(40), nullable=False, default='')
     group_id = Column(String(40), nullable=False)
-    address = Column('addr', String(40), nullable=False)
+    address = Column('addr', String(40))
     message = Column(Text)
     is_important = Column(Integer, default=0)
     request = Column(Text)
@@ -229,7 +230,7 @@ class FirmwareRequirement(object):
     def __repr__(self):
         return "FirmwareRequirement object %s" % self.kind
 
-class FirmwareMd(Base):
+class FirmwareMd(db.Base):
 
     # sqlalchemy metadata
     __tablename__ = 'firmware_md'
@@ -326,7 +327,7 @@ class FirmwareMd(Base):
     def __repr__(self):
         return "FirmwareMd object %s" % self.firmware_id
 
-class Firmware(Base):
+class Firmware(db.Base):
 
     # sqlalchemy metadata
     __tablename__ = 'firmware'
@@ -357,7 +358,7 @@ class Firmware(Base):
     def __repr__(self):
         return "Firmware object %s" % self.firmware_id
 
-class Client(Base):
+class Client(db.Base):
 
     # sqlalchemy metadata
     __tablename__ = 'clients'
@@ -378,7 +379,7 @@ class Client(Base):
     def __repr__(self):
         return "Client object %s" % self.id
 
-class Report(Base):
+class Report(db.Base):
 
     # sqlalchemy metadata
     __tablename__ = 'reports'
@@ -402,7 +403,7 @@ class Report(Base):
     def __repr__(self):
         return "Report object %s" % self.id
 
-class Setting(Base):
+class Setting(db.Base):
 
     # sqlalchemy metadata
     __tablename__ = 'settings'
@@ -419,7 +420,7 @@ class Setting(Base):
 def _get_datestr_from_datetime(when):
     return int("%04i%02i%02i" % (when.year, when.month, when.day))
 
-class Analytic(Base):
+class Analytic(db.Base):
 
     # sqlalchemy metadata
     __tablename__ = 'analytics'

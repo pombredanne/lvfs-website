@@ -14,6 +14,7 @@ from werkzeug.local import LocalProxy
 from .response import SecureResponse
 from .pluginloader import Pluginloader
 from .util import _error_internal
+from .db import Database
 
 app = Flask(__name__)
 if os.path.exists('app/custom.cfg'):
@@ -21,9 +22,10 @@ if os.path.exists('app/custom.cfg'):
     app.config.from_pyfile('custom.cfg')
 else:
     app.config.from_pyfile('flaskapp.cfg')
+app.config.from_envvar('LVFS_CUSTOM_SETTINGS')
 
-from .db import db_session
-from .models import User
+db = Database()
+db.init_app(app)
 
 lm = LoginManager()
 lm.init_app(app)
@@ -32,11 +34,12 @@ ploader = Pluginloader('plugins')
 
 @app.teardown_appcontext
 def shutdown_session(unused_exception=None):
-    db_session.remove()
+    db.session.remove()
 
 @lm.user_loader
 def load_user(user_id):
-    g.user = db_session.query(User).filter(User.username == user_id).first()
+    from .models import User
+    g.user = db.session.query(User).filter(User.username == user_id).first()
     return g.user
 
 @app.errorhandler(404)

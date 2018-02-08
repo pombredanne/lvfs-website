@@ -7,8 +7,7 @@
 from flask import request, flash, url_for, redirect, render_template, g
 from flask_login import login_required
 
-from app import app
-from .db import db_session
+from app import app, db
 
 from .util import _event_log, _error_internal, _error_permission_denied
 from .models import UserCapability, User, Group
@@ -23,14 +22,14 @@ def group_modify_by_admin(group_id):
         return _error_permission_denied('Unable to modify group as non-admin')
 
     # get group
-    group = db_session.query(Group).filter(Group.group_id == group_id).first()
+    group = db.session.query(Group).filter(Group.group_id == group_id).first()
     if not group:
         return _error_internal('No group with that ID', 422)
 
     # this is handled unsplit :/
     if 'vendor_ids' in request.form:
         group.vendor_ids = request.form['vendor_ids'].split(',')
-    db_session.commit()
+    db.session.commit()
     _event_log('Changed group %s properties' % group_id)
     flash('Updated group', 'info')
     return redirect(url_for('.group_admin', group_id=group_id))
@@ -50,10 +49,10 @@ def group_add():
 
     if not 'group_id' in request.form:
         return _error_permission_denied('Unable to add group as no data')
-    if db_session.query(Group).filter(Group.group_id == request.form['group_id']).first():
+    if db.session.query(Group).filter(Group.group_id == request.form['group_id']).first():
         return _error_internal('Already a entry with that group', 422)
-    db_session.add(Group(request.form['group_id']))
-    db_session.commit()
+    db.session.add(Group(request.form['group_id']))
+    db.session.commit()
 
     _event_log("Created group %s" % request.form['group_id'])
     flash('Added group', 'info')
@@ -69,12 +68,12 @@ def group_delete(group_id):
         return _error_permission_denied('Unable to remove user as not admin')
 
     # check whether exists in database
-    group = db_session.query(Group).filter(Group.group_id == group_id).first()
+    group = db.session.query(Group).filter(Group.group_id == group_id).first()
     if not group:
         flash("No entry with group_id %s" % group_id, 'warning')
         return redirect(url_for('.group_list'), 422)
-    db_session.delete(group)
-    db_session.commit()
+    db.session.delete(group)
+    db.session.commit()
     _event_log("Deleted group %s" % group_id)
     flash('Deleted group', 'info')
     return redirect(url_for('.group_list'), 302)
@@ -88,8 +87,8 @@ def group_admin(group_id):
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to modify group for non-admin user')
     users = []
-    group = db_session.query(Group).filter(Group.group_id == group_id).first()
-    for user in db_session.query(User).all():
+    group = db.session.query(Group).filter(Group.group_id == group_id).first()
+    for user in db.session.query(User).all():
         if user.group_id != group_id:
             continue
         users.append(user)
@@ -103,4 +102,4 @@ def group_list():
     """
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to show grouplist for non-admin user')
-    return render_template('grouplist.html', groups=db_session.query(Group).all())
+    return render_template('grouplist.html', groups=db.session.query(Group).all())

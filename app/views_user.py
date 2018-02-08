@@ -7,8 +7,7 @@
 from flask import request, flash, url_for, redirect, render_template, g
 from flask_login import login_required
 
-from app import app
-from .db import db_session
+from app import app, db
 
 from .util import _event_log, _error_internal, _error_permission_denied
 from .models import UserCapability, User, Group
@@ -62,7 +61,7 @@ def user_modify(username):
     if not 'email' in request.form:
         return _error_permission_denied('Unable to change user as no data')
     password = _password_hash(request.form['password_old'])
-    user = db_session.query(User).\
+    user = db.session.query(User).\
             filter(User.username == g.user.username).\
             filter(User.password == password).first()
     if not user:
@@ -90,7 +89,7 @@ def user_modify(username):
     user.password = _password_hash(password)
     user.display_name = name
     user.email = email
-    db_session.commit()
+    db.session.commit()
     _event_log('Changed password')
     flash('Updated profile', 'info')
     return redirect(url_for('.profile'))
@@ -105,7 +104,7 @@ def user_modify_by_admin(username):
         return _error_permission_denied('Unable to modify user as non-admin')
 
     # get user
-    user = db_session.query(User).filter(User.username == username).first()
+    user = db.session.query(User).filter(User.username == username).first()
     if not user:
         return _error_internal('No user with that username', 422)
 
@@ -131,7 +130,7 @@ def user_modify_by_admin(username):
         if request.form['password']:
             user.password = _password_hash(request.form['password'])
 
-    db_session.commit()
+    db.session.commit()
     _event_log('Changed user %s properties' % username)
     flash('Updated profile', 'info')
     return redirect(url_for('.user_admin', username=username))
@@ -159,7 +158,7 @@ def user_add():
         return _error_permission_denied('Unable to add user as no name')
     if not 'email' in request.form:
         return _error_permission_denied('Unable to add user as no email')
-    user = db_session.query(User).filter(User.username == request.form['username_new']).first()
+    user = db.session.query(User).filter(User.username == request.form['username_new']).first()
     if user:
         return _error_internal('Already a entry with that username', 422)
 
@@ -192,14 +191,14 @@ def user_add():
         flash('Username invalid', 'warning')
         return redirect(url_for('.user_list'), 422)
 
-    db_session.add(User(username=username_new,
+    db.session.add(User(username=username_new,
                         password=password,
                         display_name=name,
                         email=email,
                         group_id=group_id))
-    if not db_session.query(Group).filter(Group.group_id == group_id).first():
-        db_session.add(Group(group_id))
-    db_session.commit()
+    if not db.session.query(Group).filter(Group.group_id == group_id).first():
+        db.session.add(Group(group_id))
+    db.session.commit()
 
     _event_log("Created user %s" % username_new)
     flash('Added user', 'info')
@@ -215,12 +214,12 @@ def user_delete(username):
         return _error_permission_denied('Unable to remove user as not admin')
 
     # check whether exists in database
-    user = db_session.query(User).filter(User.username == username).first()
+    user = db.session.query(User).filter(User.username == username).first()
     if not user:
         flash("No entry with username %s" % username, 'danger')
         return redirect(url_for('.user_list'), 422)
-    db_session.delete(user)
-    db_session.commit()
+    db.session.delete(user)
+    db.session.commit()
     _event_log("Deleted user %s" % username)
     flash('Deleted user', 'info')
     return redirect(url_for('.user_list'), 302)
@@ -233,7 +232,7 @@ def user_list():
     """
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to show userlist for non-admin user')
-    return render_template('userlist.html', users=db_session.query(User).all())
+    return render_template('userlist.html', users=db.session.query(User).all())
 
 @app.route('/lvfs/user/<username>/admin')
 @login_required
@@ -243,7 +242,7 @@ def user_admin(username):
     """
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to modify user for non-admin user')
-    user = db_session.query(User).filter(User.username == username).first()
+    user = db.session.query(User).filter(User.username == username).first()
     if not user:
         flash("No entry with username %s" % username, 'danger')
         return redirect(url_for('.user_list'), 422)

@@ -7,8 +7,7 @@
 from flask import request, flash, url_for, redirect, render_template, g
 from flask_login import login_required
 
-from app import app
-from .db import db_session
+from app import app, db
 
 from .util import _event_log, _error_permission_denied
 from .models import UserCapability, Vendor
@@ -27,7 +26,7 @@ def _sort_vendor_func(a, b):
 @app.route('/vendorlist') # deprecated
 @app.route('/lvfs/vendorlist')
 def vendor_list():
-    vendors = db_session.query(Vendor).all()
+    vendors = db.session.query(Vendor).all()
     vendors.sort(_sort_vendor_func)
     return render_template('vendorlist.html', vendors=vendors)
 
@@ -46,11 +45,11 @@ def vendor_add():
 
     if not 'group_id' in request.form:
         return _error_permission_denied('Unable to add vendor as no data')
-    if db_session.query(Vendor).filter(Vendor.group_id == request.form['group_id']).first():
+    if db.session.query(Vendor).filter(Vendor.group_id == request.form['group_id']).first():
         flash('Already a vendor with that group ID', 'warning')
         return redirect(url_for('.vendor_list'), 302)
-    db_session.add(Vendor(request.form['group_id']))
-    db_session.commit()
+    db.session.add(Vendor(request.form['group_id']))
+    db.session.commit()
 
     _event_log("Created vendor %s" % request.form['group_id'])
     flash('Added vendor', 'info')
@@ -64,12 +63,12 @@ def vendor_delete(group_id):
     # security check
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to remove vendor as non-admin')
-    vendor = db_session.query(Vendor).filter(Vendor.group_id == group_id).first()
+    vendor = db.session.query(Vendor).filter(Vendor.group_id == group_id).first()
     if not vendor:
         flash('No a vendor with that group ID', 'warning')
         return redirect(url_for('.vendor_list'), 302)
-    db_session.delete(vendor)
-    db_session.commit()
+    db.session.delete(vendor)
+    db.session.commit()
 
     _event_log("Removed vendor %s" % group_id)
     flash('Removed vendor', 'info')
@@ -83,7 +82,7 @@ def vendor_details(group_id):
     # security check
     if not g.user.check_capability(UserCapability.Admin):
         return _error_permission_denied('Unable to edit vendor as non-admin')
-    vendor = db_session.query(Vendor).filter(Vendor.group_id == group_id).first()
+    vendor = db.session.query(Vendor).filter(Vendor.group_id == group_id).first()
     if not vendor:
         flash('No a vendor with that group ID', 'warning')
         return redirect(url_for('.vendor_list'), 302)
@@ -104,7 +103,7 @@ def vendor_modify_by_admin(group_id):
         return _error_permission_denied('Unable to modify vendor as non-admin')
 
     # save to database
-    vendor = db_session.query(Vendor).filter(Vendor.group_id == group_id).first()
+    vendor = db.session.query(Vendor).filter(Vendor.group_id == group_id).first()
     if not vendor:
         flash('No a vendor with that group ID', 'warning')
         return redirect(url_for('.vendor_list'), 302)
@@ -116,7 +115,7 @@ def vendor_modify_by_admin(group_id):
     vendor.is_account_holder = request.form['is_account_holder']
     vendor.is_uploading = request.form['is_uploading']
     vendor.comments = request.form['comments']
-    db_session.commit()
+    db.session.commit()
 
     _event_log('Changed vendor %s properties' % group_id)
     flash('Updated vendor', 'info')

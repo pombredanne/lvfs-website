@@ -18,10 +18,10 @@ from gi.repository import GLib
 
 def _get_settings(unused_prefix=None):
     """ return a dict of all the settings """
-    from .db import db_session
+    from app import db
     from .models import Setting
     settings = {}
-    for setting in db_session.query(Setting).all():
+    for setting in db.session.query(Setting).all():
         settings[setting.key] = setting.value
     return settings
 
@@ -63,15 +63,15 @@ def _event_log(msg, is_important=False):
     if request:
         request_path = request.path
     from .models import EventLogItem
-    from .db import db_session
+    from app import db
     event = EventLogItem(username=username,
                          message=msg,
                          group_id=group_id,
                          address=_get_client_address(),
                          request=request_path,
                          is_important=is_important)
-    db_session.add(event)
-    db_session.commit()
+    db.session.add(event)
+    db.session.commit()
 
 def _error_internal(msg=None, errcode=402):
     """ Error handler: Internal """
