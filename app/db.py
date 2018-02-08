@@ -20,12 +20,13 @@ class Database(object):
         self.Base = None
 
     def init_app(self, app):
-        print('opening database %s' % app.config['DATABASE'])
+
+        # create the engine now the app is loaded
         self.engine = create_engine(app.config['DATABASE'], convert_unicode=True)
         self.engine.echo = app.testing
         self.session = scoped_session(sessionmaker(autocommit=False,
-                                                 autoflush=False,
-                                                 bind=self.engine))
+                                                   autoflush=False,
+                                                   bind=self.engine))
         self.Base = declarative_base()
         self.Base.query = self.session.query_property()
 
@@ -38,11 +39,11 @@ class Database(object):
         from .models import User
         if not self.session.query(User).filter(User.username == 'admin').first():
             self.session.add(User(username='admin',
-                                password='5459dbe5e9aa80e077bfa40f3fb2ca8368ed09b4',
-                                display_name='Admin User',
-                                email='sign-test@fwupd.org',
-                                group_id='admin',
-                                is_enabled=True,
-                                is_qa=True,
-                                is_analyst=True))
+                                  password='5459dbe5e9aa80e077bfa40f3fb2ca8368ed09b4',
+                                  display_name='Admin User',
+                                  email='sign-test@fwupd.org',
+                                  group_id='admin',
+                                  is_enabled=True,
+                                  is_qa=True,
+                                  is_analyst=True))
             self.session.commit()

@@ -18,7 +18,7 @@ class LvfsTestCase(unittest.TestCase):
 
         # write out custom settings file
         self.cfg_filename = '/tmp/foo.cfg'
-        cfgfile = open(self.cfg_filename,'w')
+        cfgfile = open(self.cfg_filename, 'w')
         cfgfile.write("DATABASE = '%s'\nTESTING = True\n" % self.db_uri)
         cfgfile.close()
         os.environ['LVFS_CUSTOM_SETTINGS'] = self.cfg_filename
