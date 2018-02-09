@@ -126,6 +126,8 @@ class Group(db.Base):
 
     @property
     def vendor_ids(self):
+        if not len(self._vendor_ids):
+            return []
         return self._vendor_ids.split(',')
 
     @vendor_ids.setter
@@ -187,7 +189,7 @@ class EventLogItem(db.Base):
     timestamp = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
     username = Column(String(40), nullable=False, default='')
     group_id = Column(String(40), nullable=False)
-    address = Column('addr', String(40))
+    address = Column('addr', String(40), nullable=False)
     message = Column(Text)
     is_important = Column(Integer, default=0)
     request = Column(Text)
@@ -241,7 +243,7 @@ class FirmwareMd(db.Base):
     cid = Column('id', Text)
     name = Column(Text)
     summary = Column(Text)
-    guid = Column(Text)
+    _guid = Column('guid', Text)
     description = Column(Text)
     release_description = Column(Text)
     url_homepage = Column(Text)
@@ -266,16 +268,17 @@ class FirmwareMd(db.Base):
 
     @property
     def guids(self):
-        return self.guid.split(',')
+        return self._guid.split(',')
 
     @guids.setter
     def guids(self, value):
-        self.guid = ','.join(value)
+        self._guid = ','.join(value)
 
     def __init__(self):
         """ Constructor for object """
         self.firmware_id = None             # this maps the object back to Firmware
         self.cid = None                     # e.g. com.hughski.ColorHug.firmware
+        self._guid = None
         self.guids = []
         self.version = None
         self.name = None

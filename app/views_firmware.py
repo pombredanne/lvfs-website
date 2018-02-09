@@ -182,7 +182,9 @@ def firmware_delete_force(firmware_id):
     if not g.user.is_qa and fw.target == 'stable':
         return _error_permission_denied('Unable to delete stable firmware as not QA')
 
-    # delete from database: FIXME delete mds too
+    # delete from database
+    for md in fw.mds:
+        db.session.delete(md)
     db.session.delete(fw)
     db.session.commit()
 
@@ -198,6 +200,7 @@ def firmware_delete_force(firmware_id):
     elif fw.target == 'testing':
         _metadata_update_targets(targets=['testing'])
 
+    flash('Firmware deleted', 'info')
     _event_log("Deleted firmware %s" % firmware_id)
     return redirect(url_for('.firmware'))
 

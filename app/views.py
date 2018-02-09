@@ -215,9 +215,9 @@ def upload():
         if 'username' not in session:
             return redirect(url_for('.index'))
         vendor_ids = []
-        grp = db.session.query(Group).filter(Group.group_id == g.user.group_id).first()
-        if grp:
-            vendor_ids.extend(grp.vendor_ids)
+        group = db.session.query(Group).filter(Group.group_id == g.user.group_id).first()
+        if group and len(group.vendor_ids):
+            vendor_ids = group.vendor_ids
         return render_template('upload.html', vendor_ids=vendor_ids)
 
     # not correct parameters
@@ -239,7 +239,7 @@ def upload():
         ufile = UploadedFile(ploader)
         ufile.parse(os.path.basename(fileitem.filename), fileitem.read())
     except (FileTooLarge, FileTooSmall, FileNotSupported, MetadataInvalid) as e:
-        flash(str(e), 'danger')
+        flash('Failed to upload file: ' + str(e), 'danger')
         return redirect(request.url)
 
     # check the file does not already exist
@@ -330,10 +330,12 @@ def upload():
         md.checksum_container = checksum_container
 
         # from the provide
+        guids_fixme = []
         for prov in component.get_provides():
             if prov.get_kind() != AppStreamGlib.ProvideKind.FIRMWARE_FLASHED:
                 continue
-            md.guids.append(prov.get_value())
+            guids_fixme.append(prov.get_value())
+        md.guids = guids_fixme
 
         # from the release
         rel = component.get_release_default()
